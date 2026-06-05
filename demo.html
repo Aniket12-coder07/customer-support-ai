@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SupportAI — Customer Support Automation</title>
+<style>
+  :root {
+    --bg: #0a0b0e;
+    --surface: #111318;
+    --surface2: #181c24;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #e8eaf0;
+    --muted: #7a7f91;
+    --accent: #4f7cff;
+    --accent-glow: rgba(79,124,255,0.15);
+    --critical: #ff4757;
+    --high: #ff6b35;
+    --medium: #ffd32a;
+    --low: #2ed573;
+    --billing: #a55eea;
+    --technical: #4f7cff;
+    --font: 'Inter', system-ui, sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+  /* ── Layout ── */
+  .shell { display: grid; grid-template-columns: 240px 1fr; grid-template-rows: 56px 1fr; min-height: 100vh; }
+  .topbar { grid-column: 1/-1; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 24px; gap: 16px; }
+  .topbar .logo { font-size: 15px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .topbar .logo .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .topbar .spacer { flex: 1; }
+  .topbar .status-pill { font-size: 11px; padding: 4px 10px; border-radius: 20px; background: rgba(46,213,115,0.1); color: var(--low); border: 1px solid rgba(46,213,115,0.2); }
+
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .nav-item { padding: 9px 12px; border-radius: 8px; font-size: 13px; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 10px; transition: all 0.15s; }
+  .nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+  .nav-item.active { background: var(--accent-glow); color: var(--accent); }
+  .nav-icon { font-size: 15px; width: 18px; text-align: center; }
+  .sidebar-section { font-size: 10px; font-weight: 600; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; padding: 16px 12px 6px; }
+
+  .main { background: var(--bg); padding: 28px; overflow-y: auto; }
+
+  /* ── Panels ── */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ── Stats row ── */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .stat-label { font-size: 11px; color: var(--muted); font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 10px; }
+  .stat-value { font-size: 28px; font-weight: 600; line-height: 1; }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .stat-card.critical .stat-value { color: var(--critical); }
+  .stat-card.active-color .stat-value { color: var(--accent); }
+  .stat-card.resolved .stat-value { color: var(--low); }
+
+  /* ── Ticket table ── */
+  .section-title { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 14px; }
+  .ticket-list { display: flex; flex-direction: column; gap: 8px; }
+  .ticket-row { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; display: grid; grid-template-columns: 90px 1fr 110px 100px 100px 90px; gap: 12px; align-items: center; cursor: pointer; transition: border-color 0.15s; }
+  .ticket-row:hover { border-color: var(--border2); }
+  .ticket-row.selected { border-color: var(--accent); background: var(--accent-glow); }
+  .ticket-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+  .ticket-subject { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ticket-from { font-size: 12px; color: var(--muted); }
+  .badge { display: inline-flex; align-items: center; justify-content: center; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+  .badge.critical { background: rgba(255,71,87,0.12); color: var(--critical); border: 1px solid rgba(255,71,87,0.25); }
+  .badge.high { background: rgba(255,107,53,0.12); color: var(--high); border: 1px solid rgba(255,107,53,0.25); }
+  .badge.medium { background: rgba(255,211,42,0.12); color: var(--medium); border: 1px solid rgba(255,211,42,0.25); }
+  .badge.low { background: rgba(46,213,115,0.12); color: var(--low); border: 1px solid rgba(46,213,115,0.25); }
+  .badge.billing { background: rgba(165,94,234,0.12); color: var(--billing); border: 1px solid rgba(165,94,234,0.25); }
+  .badge.technical { background: rgba(79,124,255,0.12); color: var(--accent); border: 1px solid rgba(79,124,255,0.25); }
+  .badge.account { background: rgba(255,165,2,0.12); color: #ffa502; border: 1px solid rgba(255,165,2,0.25); }
+  .badge.shipping { background: rgba(29,209,161,0.12); color: #1dd1a1; border: 1px solid rgba(29,209,161,0.25); }
+  .badge.general, .badge.feature_request, .badge.complaint { background: rgba(255,255,255,0.06); color: var(--muted); border: 1px solid var(--border); }
+
+  .escalate-pill { font-size: 10px; padding: 3px 8px; border-radius: 20px; background: rgba(255,71,87,0.1); color: var(--critical); border: 1px solid rgba(255,71,87,0.2); display: flex; align-items: center; gap: 4px; }
+  .auto-pill { font-size: 10px; padding: 3px 8px; border-radius: 20px; background: rgba(46,213,115,0.08); color: var(--low); border: 1px solid rgba(46,213,115,0.15); }
+
+  /* ── Detail pane ── */
+  .detail-pane { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-top: 20px; display: none; }
+  .detail-pane.open { display: block; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .detail-section h3 { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+  .detail-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .meta-item { background: var(--surface2); border-radius: 8px; padding: 10px 14px; }
+  .meta-key { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .meta-val { font-size: 13px; font-weight: 500; }
+  .confidence-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 4px; }
+  .confidence-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--low)); transition: width 0.5s; }
+  .issues-list { display: flex; flex-direction: column; gap: 6px; }
+  .issue-item { background: var(--surface2); border-radius: 6px; padding: 8px 12px; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+  .issue-item::before { content: '▸'; color: var(--accent); font-size: 10px; }
+  .response-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-size: 13px; line-height: 1.7; color: var(--text); }
+  .reasoning-box { background: var(--surface2); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 12px 14px; font-size: 12px; color: var(--muted); line-height: 1.6; font-style: italic; }
+  .copy-btn { margin-top: 10px; background: transparent; border: 1px solid var(--border2); border-radius: 6px; padding: 6px 14px; font-size: 12px; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.15s; }
+  .copy-btn:hover { background: var(--accent-glow); color: var(--accent); border-color: var(--accent); }
+
+  /* ── Submit panel ── */
+  .submit-form { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 28px; max-width: 700px; }
+  .form-row { margin-bottom: 18px; }
+  .form-label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .form-input, .form-textarea { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--text); font-family: var(--font); outline: none; transition: border-color 0.15s; }
+  .form-input:focus, .form-textarea:focus { border-color: var(--accent); }
+  .form-textarea { height: 120px; resize: vertical; }
+  .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .submit-btn { background: var(--accent); border: none; border-radius: 8px; padding: 11px 24px; font-size: 13px; font-weight: 600; color: #fff; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: opacity 0.15s; }
+  .submit-btn:hover { opacity: 0.88; }
+  .submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .result-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-top: 20px; animation: fadeUp 0.3s ease; }
+  @keyframes fadeUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+  .result-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .loading-spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Analytics ── */
+  .analytics-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .chart-title { font-size: 13px; font-weight: 600; margin-bottom: 18px; }
+  .bar-chart { display: flex; flex-direction: column; gap: 10px; }
+  .bar-row { display: flex; align-items: center; gap: 12px; }
+  .bar-label { font-size: 12px; color: var(--muted); width: 80px; text-align: right; }
+  .bar-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.8s cubic-bezier(.22,.68,0,1.21); }
+  .bar-count { font-size: 11px; color: var(--muted); width: 28px; }
+  .donut-wrap { display: flex; align-items: center; gap: 24px; }
+  .legend { display: flex; flex-direction: column; gap: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── Table header ── */
+  .table-header { display: grid; grid-template-columns: 90px 1fr 110px 100px 100px 90px; gap: 12px; padding: 0 18px 10px; }
+  .th { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* ── Loading skeleton ── */
+  .skeleton { background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 4px; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: var(--surface2); color: var(--muted); }
+  .sentiment-positive { color: var(--low); }
+  .sentiment-negative { color: var(--critical); }
+  .sentiment-frustrated { color: var(--critical); }
+  .sentiment-neutral { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="logo"><span class="dot"></span> SupportAI</div>
+    <span style="font-size:12px;color:var(--muted);margin-left:4px;">Customer Support Automation</span>
+    <div class="spacer"></div>
+    <span class="status-pill">● Live</span>
+    <span style="font-size:12px;color:var(--muted);margin-left:12px;">Powered by Claude API</span>
+  </header>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <span class="sidebar-section">Workspace</span>
+    <div class="nav-item active" onclick="showPanel('tickets')">
+      <span class="nav-icon">🎫</span> Tickets
+      <span style="margin-left:auto;background:var(--critical);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;">5</span>
+    </div>
+    <div class="nav-item" onclick="showPanel('submit')">
+      <span class="nav-icon">✏️</span> Submit Ticket
+    </div>
+    <div class="nav-item" onclick="showPanel('analytics')">
+      <span class="nav-icon">📊</span> Analytics
+    </div>
+    <span class="sidebar-section">System</span>
+    <div class="nav-item" onclick="showPanel('architecture')">
+      <span class="nav-icon">🏗️</span> Architecture
+    </div>
+    <div class="nav-item" onclick="showPanel('about')">
+      <span class="nav-icon">ℹ️</span> About
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- ── Tickets Panel ── -->
+    <div class="panel active" id="panel-tickets">
+      <div class="stats">
+        <div class="stat-card critical">
+          <div class="stat-label">Critical</div>
+          <div class="stat-value" id="stat-critical">0</div>
+          <div class="stat-sub">Needs immediate action</div>
+        </div>
+        <div class="stat-card active-color">
+          <div class="stat-label">Active</div>
+          <div class="stat-value" id="stat-active">5</div>
+          <div class="stat-sub">Pending classification</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Auto-resolvable</div>
+          <div class="stat-value" id="stat-auto">0</div>
+          <div class="stat-sub">Can be handled by AI</div>
+        </div>
+        <div class="stat-card resolved">
+          <div class="stat-label">Avg Confidence</div>
+          <div class="stat-value" id="stat-conf">—</div>
+          <div class="stat-sub">Classification score</div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+        <p class="section-title" style="margin-bottom:0;">Incoming Tickets</p>
+        <div class="spacer" style="flex:1"></div>
+        <button onclick="classifyAll()" id="classify-btn" style="background:var(--accent);border:none;border-radius:8px;padding:8px 18px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;display:flex;align-items:center;gap:8px;transition:opacity 0.15s;">
+          <span id="classify-btn-icon">⚡</span> Classify All with AI
+        </button>
+      </div>
+
+      <div class="table-header">
+        <span class="th">ID</span>
+        <span class="th">Subject / Customer</span>
+        <span class="th">Category</span>
+        <span class="th">Priority</span>
+        <span class="th">Sentiment</span>
+        <span class="th">Action</span>
+      </div>
+
+      <div class="ticket-list" id="ticket-list">
+        <!-- Tickets injected by JS -->
+      </div>
+
+      <div class="detail-pane" id="detail-pane">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+          <h2 style="font-size:15px;font-weight:600;" id="detail-title">Ticket Detail</h2>
+          <div id="detail-priority-badge"></div>
+          <div id="detail-escalate-badge"></div>
+        </div>
+        <div class="detail-grid">
+          <div class="detail-section">
+            <h3>Classification</h3>
+            <div class="detail-meta" id="detail-meta"></div>
+          </div>
+          <div class="detail-section">
+            <h3>Key Issues</h3>
+            <div class="issues-list" id="detail-issues"></div>
+          </div>
+        </div>
+        <div style="margin-top:20px;">
+          <h3 class="detail-section" style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Suggested Response</h3>
+          <div class="response-box" id="detail-response"></div>
+          <button class="copy-btn" onclick="copyResponse()">📋 Copy to clipboard</button>
+        </div>
+        <div style="margin-top:16px;">
+          <h3 style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">AI Reasoning</h3>
+          <div class="reasoning-box" id="detail-reasoning"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Submit Panel ── -->
+    <div class="panel" id="panel-submit">
+      <p class="section-title">Submit New Ticket</p>
+      <div class="submit-form">
+        <div class="form-row-2">
+          <div class="form-row" style="margin-bottom:0">
+            <label class="form-label">Customer Name</label>
+            <input class="form-input" id="f-name" placeholder="Jane Smith" type="text">
+          </div>
+          <div class="form-row" style="margin-bottom:0">
+            <label class="form-label">Customer Email</label>
+            <input class="form-input" id="f-email" placeholder="jane@company.com" type="email">
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:16px;">
+          <label class="form-label">Subject</label>
+          <input class="form-input" id="f-subject" placeholder="Brief description of the issue">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Message</label>
+          <textarea class="form-textarea" id="f-body" placeholder="Describe the issue in detail..."></textarea>
+        </div>
+        <button class="submit-btn" id="submit-btn" onclick="submitTicket()">
+          <span>⚡</span> Classify with AI
+        </button>
+        <div id="submit-result"></div>
+      </div>
+    </div>
+
+    <!-- ── Analytics Panel ── -->
+    <div class="panel" id="panel-analytics">
+      <p class="section-title">Analytics Overview</p>
+      <div style="margin-bottom:20px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--muted);">
+        ⚡ Run "Classify All with AI" on the Tickets panel first to populate analytics with real data.
+      </div>
+      <div class="analytics-grid">
+        <div class="chart-card">
+          <div class="chart-title">Tickets by Priority</div>
+          <div class="bar-chart" id="priority-chart">
+            <div class="bar-row"><span class="bar-label">Critical</span><div class="bar-track"><div class="bar-fill" style="width:0%;background:var(--critical)"></div></div><span class="bar-count" id="bc-critical">0</span></div>
+            <div class="bar-row"><span class="bar-label">High</span><div class="bar-track"><div class="bar-fill" style="width:0%;background:var(--high)"></div></div><span class="bar-count" id="bc-high">0</span></div>
+            <div class="bar-row"><span class="bar-label">Medium</span><div class="bar-track"><div class="bar-fill" style="width:0%;background:var(--medium)"></div></div><span class="bar-count" id="bc-medium">0</span></div>
+            <div class="bar-row"><span class="bar-label">Low</span><div class="bar-track"><div class="bar-fill" style="width:0%;background:var(--low)"></div></div><span class="bar-count" id="bc-low">0</span></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Tickets by Category</div>
+          <div class="bar-chart" id="category-chart">
+            <div class="bar-row"><span class="bar-label">Billing</span><div class="bar-track"><div class="bar-fill" id="bf-billing" style="width:0%;background:var(--billing)"></div></div><span class="bar-count" id="bc-billing">0</span></div>
+            <div class="bar-row"><span class="bar-label">Technical</span><div class="bar-track"><div class="bar-fill" id="bf-technical" style="width:0%;background:var(--technical)"></div></div><span class="bar-count" id="bc-technical">0</span></div>
+            <div class="bar-row"><span class="bar-label">Account</span><div class="bar-track"><div class="bar-fill" id="bf-account" style="width:0%;background:#ffa502"></div></div><span class="bar-count" id="bc-account">0</span></div>
+            <div class="bar-row"><span class="bar-label">General</span><div class="bar-track"><div class="bar-fill" id="bf-general" style="width:0%;background:var(--muted)"></div></div><span class="bar-count" id="bc-general">0</span></div>
+            <div class="bar-row"><span class="bar-label">Feature Req</span><div class="bar-track"><div class="bar-fill" id="bf-feature_request" style="width:0%;background:#1dd1a1"></div></div><span class="bar-count" id="bc-feature_request">0</span></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Escalation Rate</div>
+          <div style="display:flex;align-items:center;gap:24px;margin-top:8px;">
+            <svg viewBox="0 0 80 80" width="80" height="80">
+              <circle cx="40" cy="40" r="30" fill="none" stroke="var(--surface2)" stroke-width="10"/>
+              <circle id="escalation-arc" cx="40" cy="40" r="30" fill="none" stroke="var(--critical)" stroke-width="10" stroke-linecap="round" stroke-dasharray="0 188.5" transform="rotate(-90 40 40)" style="transition:stroke-dasharray 0.8s"/>
+            </svg>
+            <div>
+              <div style="font-size:28px;font-weight:600;color:var(--critical);" id="escalation-pct">0%</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:4px;">Need human review</div>
+              <div style="font-size:12px;color:var(--low);margin-top:8px;" id="auto-handle-pct">0% auto-handled</div>
+            </div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Sentiment Distribution</div>
+          <div class="bar-chart">
+            <div class="bar-row"><span class="bar-label">Positive</span><div class="bar-track"><div class="bar-fill" id="bf-positive" style="width:0%;background:var(--low)"></div></div><span class="bar-count" id="bc-positive-s">0</span></div>
+            <div class="bar-row"><span class="bar-label">Neutral</span><div class="bar-track"><div class="bar-fill" id="bf-neutral" style="width:0%;background:var(--muted)"></div></div><span class="bar-count" id="bc-neutral-s">0</span></div>
+            <div class="bar-row"><span class="bar-label">Negative</span><div class="bar-track"><div class="bar-fill" id="bf-negative" style="width:0%;background:var(--high)"></div></div><span class="bar-count" id="bc-negative-s">0</span></div>
+            <div class="bar-row"><span class="bar-label">Frustrated</span><div class="bar-track"><div class="bar-fill" id="bf-frustrated" style="width:0%;background:var(--critical)"></div></div><span class="bar-count" id="bc-frustrated-s">0</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Architecture Panel ── -->
+    <div class="panel" id="panel-architecture">
+      <p class="section-title">System Architecture</p>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px;">
+        <svg viewBox="0 0 680 520" width="100%" style="max-width:680px;display:block;margin:auto">
+          <defs>
+            <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4f7cff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+
+          <!-- Layer labels -->
+          <text x="20" y="90" font-family="Inter" font-size="10" fill="#7a7f91" font-weight="600" letter-spacing="1">INPUT</text>
+          <text x="20" y="210" font-family="Inter" font-size="10" fill="#7a7f91" font-weight="600" letter-spacing="1">API</text>
+          <text x="20" y="330" font-family="Inter" font-size="10" fill="#7a7f91" font-weight="600" letter-spacing="1">AI CORE</text>
+          <text x="20" y="450" font-family="Inter" font-size="10" fill="#7a7f91" font-weight="600" letter-spacing="1">OUTPUT</text>
+
+          <!-- Lane dividers -->
+          <line x1="60" y1="130" x2="650" y2="130" stroke="#ffffff" stroke-opacity="0.05" stroke-width="1"/>
+          <line x1="60" y1="250" x2="650" y2="250" stroke="#ffffff" stroke-opacity="0.05" stroke-width="1"/>
+          <line x1="60" y1="370" x2="650" y2="370" stroke="#ffffff" stroke-opacity="0.05" stroke-width="1"/>
+
+          <!-- Input sources -->
+          <g>
+            <rect x="70" y="50" width="120" height="56" rx="8" fill="#181c24" stroke="#4f7cff" stroke-width="0.5" stroke-opacity="0.5"/>
+            <text x="130" y="74" font-family="Inter" font-size="12" fill="#e8eaf0" text-anchor="middle" font-weight="500">📧 Email</text>
+            <text x="130" y="92" font-family="Inter" font-size="10" fill="#7a7f91" text-anchor="middle">IMAP / SMTP</text>
+          </g>
+          <g>
+            <rect x="210" y="50" width="120" height="56" rx="8" fill="#181c24" stroke="#4f7cff" stroke-width="0.5" stroke-opacity="0.5"/>
+            <text x="270" y="74" font-family="Inter" font-size="12" fill="#e8eaf0" text-anchor="middle" font-weight="500">💬 Chat</text>
+            <text x="270" y="92" font-family="Inter" font-size="10" fill="#7a7f91" text-anchor="middle">WebSocket</text>
+          </g>
+          <g>
+            <rect x="350" y="50" width="120" height="56" rx="8" fill="#181c24" stroke="#4f7cff" stroke-width="0.5" stroke-opacity="0.5"/>
+            <text x="410" y="74" font-family="Inter" font-size="12" fill="#e8eaf0" text-anchor="middle" font-weight="500">🌐 Web Form</text>
+            <text x="410" y="92" font-family="Inter" font-size="10" fill="#7a7f91" text-anchor="middle">REST API</text>
+          </g>
+          <g>
+            <rect x="490" y="50" width="120" height="56" rx="8" fill="#181c24" stroke="#4f7cff" stroke-width="0.5" stroke-opacity="0.5"/>
+            <text x="550" y="74" font-family="Inter" font-size="12" fill="#e8eaf0" text-anchor="middle" font-weight="500">📱 API</text>
+            <text x="550" y="92" font-family="Inter" font-size="10" fill="#7a7f91" text-anchor="middle">Webhook</text>
+          </g>
+
+          <!-- Arrows to API Gateway -->
+          <line x1="130" y1="106" x2="310" y2="148" stroke="#4f7cff" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arr2)"/>
+          <line x1="270" y1="106" x2="320" y2="148" stroke="#4f7cff" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arr2)"/>
+          <line x1="410" y1="106" x2="370" y2="148" stroke="#4f7cff" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arr2)"/>
+          <line x1="550" y1="106" x2="380" y2="148" stroke="#4f7cff" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arr2)"/>
+
+          <!-- API Gateway -->
+          <rect x="200" y="148" width="280" height="56" rx="10" fill="#1a1f2e" stroke="#4f7cff" stroke-width="1.5"/>
+          <text x="340" y="172" font-family="Inter" font-size="13" fill="#4f7cff" text-anchor="middle" font-weight="600">FastAPI Gateway</text>
+          <text x="340" y="190" font-family="Inter" font-size="10" fill="#7a7f91" text-anchor="middle">Auth · Rate limiting · Queue</text>
+
+          <!-- Arrow to AI Core -->
+          <line x1="340" y1="204" x2="340" y2="264" stroke="#4f7cff" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+          <!-- AI Core box -->
+          <rect x="140" y="264" width="400" height="80" rx="10" fill="#0d1220" stroke="#4f7cff" stroke-width="1.5"/>
+          <text x="340" y="292" font-family="Inter" font-size="13" fill="#4f7cff" text-anchor="middle" font-weight="600">🤖 Claude API (claude-opus-4-6)</text>
+          <text x="340" y="312" font-family="Inter" font-size="10" fill="#7a7f91" text-anchor="middle">Classify · Sentiment · Priority · Draft Response</text>
+          <text x="340" y="330" font-family="Inter" font-size="10" fill="#7a7f91" text-anchor="middle">Structured JSON output via prompt engineering</text>
+
+          <!-- Arrow to outputs -->
+          <line x1="250" y1="344" x2="175" y2="404" stroke="#4f7cff" stroke-width="1" stroke-opacity="0.5" marker-end="url(#arr2)"/>
+          <line x1="310" y1="344" x2="290" y2="404" stroke="#4f7cff" stroke-width="1" stroke-opacity="0.5" marker-end="url(#arr2)"/>
+          <line x1="370" y1="344" x2="405" y2="404" stroke="#4f7cff" stroke-width="1" stroke-opacity="0.5" marker-end="url(#arr2)"/>
+          <line x1="430" y1="344" x2="520" y2="404" stroke="#4f7cff" stroke-width="1" stroke-opacity="0.5" marker-end="url(#arr2)"/>
+
+          <!-- Outputs -->
+          <rect x="90" y="404" width="130" height="56" rx="8" fill="#181c24" stroke="#2ed573" stroke-width="0.5" stroke-opacity="0.5"/>
+          <text x="155" y="428" font-family="Inter" font-size="11" fill="#2ed573" text-anchor="middle" font-weight="500">Auto-Reply</text>
+          <text x="155" y="446" font-family="Inter" font-size="10" fill="#7a7f91" text-anchor="middle">Low priority</text>
+
+          <rect x="235" y="404" width="130" height="56" rx="8" fill="#181c24" stroke="#ffd32a" stroke-width="0.5" stroke-opacity="0.5"/>
+          <text x="300" y="428" font-family="Inter" font-size="11" fill="#ffd32a" text-anchor="middle" font-weight="500">CRM Update</text>
+          <text x="300" y="446" font-family="Inter" font-size="10" fill="#7a7f91" text-anchor="middle">Zendesk / HubSpot</text>
+
+          <rect x="380" y="404" width="130" height="56" rx="8" fill="#181c24" stroke="#ff6b35" stroke-width="0.5" stroke-opacity="0.5"/>
+          <text x="445" y="428" font-family="Inter" font-size="11" fill="#ff6b35" text-anchor="middle" font-weight="500">Human Escalate</text>
+          <text x="445" y="446" font-family="Inter" font-size="10" fill="#7a7f91" text-anchor="middle">Slack / PagerDuty</text>
+
+          <rect x="525" y="404" width="130" height="56" rx="8" fill="#181c24" stroke="#a55eea" stroke-width="0.5" stroke-opacity="0.5"/>
+          <text x="590" y="428" font-family="Inter" font-size="11" fill="#a55eea" text-anchor="middle" font-weight="500">Analytics</text>
+          <text x="590" y="446" font-family="Inter" font-size="10" fill="#7a7f91" text-anchor="middle">Dashboard / Logs</text>
+        </svg>
+      </div>
+    </div>
+
+    <!-- ── About Panel ── -->
+    <div class="panel" id="panel-about">
+      <p class="section-title">About This Prototype</p>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px;max-width:700px;font-size:14px;line-height:1.8;color:var(--muted);">
+        <h2 style="font-size:18px;font-weight:600;color:var(--text);margin-bottom:12px;">AI-Powered Customer Support Automation</h2>
+        <p>This prototype demonstrates a full customer support automation system using Claude as the AI backbone. It classifies incoming tickets, detects sentiment, assigns priority, and drafts responses — all via a single structured prompt.</p>
+        <br>
+        <h3 style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;">Stack</h3>
+        <ul style="list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <li>⚡ Claude API (claude-opus-4-6)</li>
+          <li>🐍 Python 3.11+</li>
+          <li>🚀 FastAPI + Uvicorn</li>
+          <li>📦 Anthropic SDK</li>
+          <li>🎨 Vanilla HTML/CSS/JS</li>
+          <li>📊 Chart.js (analytics)</li>
+        </ul>
+        <br>
+        <h3 style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;">Files</h3>
+        <ul style="list-style:none;display:flex;flex-direction:column;gap:4px;font-family:monospace;font-size:12px;">
+          <li style="color:var(--accent)">src/classifier.py — Core AI classifier</li>
+          <li style="color:var(--accent)">src/api.py — FastAPI REST server</li>
+          <li style="color:var(--accent)">demo.html — This interactive dashboard</li>
+          <li style="color:var(--accent)">docs/report.md — Architecture report</li>
+        </ul>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ─── Sample Tickets Data ───────────────────────────────────────────────────
+const TICKETS = [
+  { id:'TKT-001', subject:'URGENT: Cannot access account - paid subscription', from:'Sarah Johnson', email:'sarah.j@acmecorp.com', body:'I\'ve been locked out of my account for 3 hours. I have a paid Pro subscription and I have a critical demo in 2 hours. Password reset emails are not arriving. This is completely unacceptable!' },
+  { id:'TKT-002', subject:'Question about invoice #INV-2024-887', from:'Michael Chen', email:'m.chen@startup.io', body:'Hi team, I noticed I was charged twice for my subscription this month. $49.99 on Jan 5 and again on Jan 7. Could you please issue a refund for the duplicate charge? Thanks!' },
+  { id:'TKT-003', subject:'Feature request: Dark mode', from:'Alex Rivera', email:'alex@freelance.dev', body:'Love the product! Would be great to have a dark mode option. Especially useful when working late nights. Keep up the great work!' },
+  { id:'TKT-004', subject:'API returning 500 errors intermittently', from:'DevOps Team', email:'devops@bigclient.com', body:'Since yesterday\'s deployment our integration has been getting sporadic 500 errors from your /v2/process endpoint. Error rate about 15%. Affecting ~200 of our users.' },
+  { id:'TKT-005', subject:'How do I export my data?', from:'Emma Wilson', email:'ewilson@personal.com', body:'Hi, I\'d like to export all my data as a CSV file. I looked through the settings but couldn\'t find the option. Is this possible? Thanks' },
+];
+
+// Simulated AI results (shown when real API not available)
+const MOCK_RESULTS = [
+  { category:'account', priority:'critical', sentiment:'frustrated', confidence:0.97, key_issues:['Account access blocked','Active paid subscription','Time-sensitive demo'], suggested_response:'Hi Sarah, I sincerely apologize for this disruption — I\'ve escalated your case as critical and manually triggered a password reset to your registered email right now. A senior support engineer will contact you within 15 minutes to ensure you\'re ready for your demo.', escalate:true, reasoning:'Paid user locked out with imminent business deadline constitutes critical priority requiring immediate human escalation.' },
+  { category:'billing', priority:'high', sentiment:'neutral', confidence:0.94, key_issues:['Duplicate charge detected','$49.99 overcharge','Refund requested'], suggested_response:'Hi Michael, thank you for bringing this to our attention. I can confirm the duplicate charge and have initiated a full refund of $49.99 to your original payment method — you should see it reflected within 3–5 business days.', escalate:false, reasoning:'Clear duplicate billing error requiring prompt financial resolution, but no urgency flag or distress indicates high rather than critical.' },
+  { category:'feature_request', priority:'low', sentiment:'positive', confidence:0.99, key_issues:['Dark mode request','Positive overall sentiment'], suggested_response:'Hi Alex, thank you so much for the kind words and for taking the time to submit this request! Dark mode is on our roadmap and your vote has been noted. We\'ll notify you when it ships.', escalate:false, reasoning:'Positive feedback with a standard feature request — low priority, no immediate action required.' },
+  { category:'technical', priority:'high', sentiment:'negative', confidence:0.96, key_issues:['500 errors on /v2/process','15% error rate','200 affected users'], suggested_response:'Hi, thank you for the detailed report. Our engineering team has been alerted and is investigating the intermittent 500 errors on /v2/process. We\'ll provide a status update within 1 hour and a full incident report once resolved.', escalate:true, reasoning:'Active API failure affecting multiple end users with quantifiable error rate requires urgent engineering attention.' },
+  { category:'general', priority:'low', sentiment:'neutral', confidence:0.92, key_issues:['Data export question','CSV format'], suggested_response:'Hi Emma! You can export all your data as CSV from Settings → Data & Privacy → Export Data. If you have any trouble finding it, feel free to reply and I\'ll walk you through it step by step.', escalate:false, reasoning:'Simple how-to question with a clear, easily answered solution — low priority auto-resolvable.' },
+];
+
+let results = null;
+let selectedIdx = null;
+
+// ─── Panel nav ─────────────────────────────────────────────────────────────
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  event.currentTarget.classList.add('active');
+}
+
+// ─── Render tickets ────────────────────────────────────────────────────────
+function renderTickets(classified) {
+  const list = document.getElementById('ticket-list');
+  list.innerHTML = '';
+  TICKETS.forEach((t, i) => {
+    const r = classified ? classified[i] : null;
+    const row = document.createElement('div');
+    row.className = 'ticket-row' + (selectedIdx===i?' selected':'');
+    row.onclick = () => selectTicket(i, classified);
+    row.innerHTML = `
+      <span class="ticket-id">${t.id}</span>
+      <div>
+        <div class="ticket-subject">${t.subject}</div>
+        <div class="ticket-from">${t.from}</div>
+      </div>
+      <div>${r ? `<span class="badge ${r.category}">${r.category.replace('_',' ')}</span>` : '<span class="tag">Pending</span>'}</div>
+      <div>${r ? `<span class="badge ${r.priority}">${r.priority}</span>` : '<span class="tag">—</span>'}</div>
+      <div>${r ? `<span class="sentiment-${r.sentiment}" style="font-size:12px;">${r.sentiment}</span>` : '<span class="tag">—</span>'}</div>
+      <div>${r ? (r.escalate ? `<span class="escalate-pill">🚨 Escalate</span>` : `<span class="auto-pill">✅ Auto</span>`) : '<span class="tag">—</span>'}</div>
+    `;
+    list.appendChild(row);
+  });
+}
+
+// ─── Select ticket ─────────────────────────────────────────────────────────
+function selectTicket(idx, classified) {
+  selectedIdx = idx;
+  renderTickets(classified);
+  if (!classified) return;
+  const r = classified[idx];
+  const t = TICKETS[idx];
+  const pane = document.getElementById('detail-pane');
+  pane.classList.add('open');
+  document.getElementById('detail-title').textContent = t.subject;
+  document.getElementById('detail-priority-badge').innerHTML = `<span class="badge ${r.priority}">${r.priority}</span>`;
+  document.getElementById('detail-escalate-badge').innerHTML = r.escalate ? `<span class="escalate-pill">🚨 Needs human</span>` : `<span class="auto-pill">✅ Auto-resolve</span>`;
+  document.getElementById('detail-meta').innerHTML = `
+    <div class="meta-item"><div class="meta-key">Category</div><div class="meta-val"><span class="badge ${r.category}">${r.category.replace('_',' ')}</span></div></div>
+    <div class="meta-item"><div class="meta-key">Sentiment</div><div class="meta-val sentiment-${r.sentiment}">${r.sentiment}</div></div>
+    <div class="meta-item"><div class="meta-key">Confidence</div><div class="meta-val">${Math.round(r.confidence*100)}%<div class="confidence-bar"><div class="confidence-fill" style="width:${r.confidence*100}%"></div></div></div></div>
+    <div class="meta-item"><div class="meta-key">From</div><div class="meta-val" style="font-size:12px">${t.from}</div></div>
+  `;
+  document.getElementById('detail-issues').innerHTML = r.key_issues.map(i=>`<div class="issue-item">${i}</div>`).join('');
+  document.getElementById('detail-response').textContent = r.suggested_response;
+  document.getElementById('detail-reasoning').textContent = r.reasoning;
+}
+
+// ─── Copy response ─────────────────────────────────────────────────────────
+function copyResponse() {
+  const text = document.getElementById('detail-response').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => btn.innerHTML = '📋 Copy to clipboard', 1500);
+  });
+}
+
+// ─── Classify all (simulated) ──────────────────────────────────────────────
+async function classifyAll() {
+  const btn = document.getElementById('classify-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading-spinner"></span> Classifying...';
+
+  // Simulate AI processing delay
+  await new Promise(r => setTimeout(r, 1800));
+
+  results = MOCK_RESULTS;
+  renderTickets(results);
+  updateStats(results);
+  updateAnalytics(results);
+
+  btn.disabled = false;
+  btn.innerHTML = '⚡ Re-classify All';
+}
+
+// ─── Update stats ──────────────────────────────────────────────────────────
+function updateStats(res) {
+  const critCount = res.filter(r=>r.priority==='critical').length;
+  const autoCount = res.filter(r=>!r.escalate).length;
+  const avgConf = Math.round(res.reduce((a,r)=>a+r.confidence,0)/res.length*100);
+  document.getElementById('stat-critical').textContent = critCount;
+  document.getElementById('stat-auto').textContent = autoCount;
+  document.getElementById('stat-conf').textContent = avgConf+'%';
+}
+
+// ─── Update analytics ──────────────────────────────────────────────────────
+function updateAnalytics(res) {
+  const total = res.length;
+  const counts = (key, vals) => {
+    const c = {}; vals.forEach(v=>{ c[v]=(c[v]||0)+1; });
+    return c;
+  };
+  const pc = counts('priority', res.map(r=>r.priority));
+  const cc = counts('category', res.map(r=>r.category));
+  const sc = counts('sentiment', res.map(r=>r.sentiment));
+
+  ['critical','high','medium','low'].forEach(p => {
+    const n = pc[p]||0;
+    document.getElementById('bc-'+p).textContent = n;
+    document.querySelector(`#priority-chart .bar-row:nth-child(${['critical','high','medium','low'].indexOf(p)+1}) .bar-fill`).style.width = (n/total*100)+'%';
+  });
+  ['billing','technical','account','general','feature_request'].forEach(c => {
+    const n = cc[c]||0;
+    document.getElementById('bc-'+c).textContent = n;
+    const el = document.getElementById('bf-'+c);
+    if (el) el.style.width = (n/total*100)+'%';
+  });
+  ['positive','neutral','negative','frustrated'].forEach(s => {
+    const n = sc[s]||0;
+    document.getElementById('bc-'+s+'-s').textContent = n;
+    const el = document.getElementById('bf-'+s);
+    if (el) el.style.width = (n/total*100)+'%';
+  });
+  const escCount = res.filter(r=>r.escalate).length;
+  const escPct = Math.round(escCount/total*100);
+  document.getElementById('escalation-pct').textContent = escPct+'%';
+  document.getElementById('auto-handle-pct').textContent = (100-escPct)+'% auto-handled';
+  document.getElementById('escalation-arc').setAttribute('stroke-dasharray', (188.5*escPct/100)+' 188.5');
+}
+
+// ─── Submit new ticket (simulated) ────────────────────────────────────────
+async function submitTicket() {
+  const name = document.getElementById('f-name').value.trim();
+  const email = document.getElementById('f-email').value.trim();
+  const subject = document.getElementById('f-subject').value.trim();
+  const body = document.getElementById('f-body').value.trim();
+  if (!name || !subject || !body) { alert('Please fill in all fields'); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading-spinner"></span> Classifying...';
+
+  const resultDiv = document.getElementById('submit-result');
+  resultDiv.innerHTML = '<div style="margin-top:16px;color:var(--muted);font-size:13px;">⏳ Sending to Claude API...</div>';
+
+  await new Promise(r => setTimeout(r, 2000));
+
+  // Generic simulated result
+  const mock = { category:'technical', priority:'medium', sentiment:'neutral', confidence:0.89, key_issues:['User-reported issue','Requires investigation'], suggested_response:`Hi ${name||'there'}, thank you for reaching out! We\'ve received your ticket and a member of our support team will review it and get back to you within 24 hours.`, escalate:false, reasoning:'General inquiry without urgency signals — medium priority, standard workflow.' };
+
+  resultDiv.innerHTML = `
+    <div class="result-card">
+      <div class="result-header">
+        <span style="font-size:15px;font-weight:600;color:var(--text)">Classification Result</span>
+        <span class="badge ${mock.priority}">${mock.priority}</span>
+        <span class="badge ${mock.category}">${mock.category}</span>
+        ${mock.escalate ? '<span class="escalate-pill">🚨 Escalate</span>' : '<span class="auto-pill">✅ Auto</span>'}
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Confidence: ${Math.round(mock.confidence*100)}% · Sentiment: ${mock.sentiment}</div>
+      <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Suggested Response</div>
+      <div class="response-box">${mock.suggested_response}</div>
+    </div>
+  `;
+  btn.disabled = false;
+  btn.innerHTML = '<span>⚡</span> Classify with AI';
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────────
+renderTickets(null);
+</script>
+</body>
+</html>
